@@ -50,6 +50,20 @@ HAS_TORCH = importlib.util.find_spec('torch') is not None
 
 @unittest.skipUnless(HAS_TORCH, 'PyTorch required for numerical checks')
 class NumericalTests(unittest.TestCase):
+    def test_diagnostic_masks_and_action_changes(self):
+        import torch
+        from diagnose_semantic_pilot import compare_outputs
+        on = {'fused_logits': torch.tensor([[1., 2., -float('inf')], [3., 0., -float('inf')]]),
+              'fuse_weights': torch.tensor([[.5], [.999]])}
+        off = {'fused_logits': torch.tensor([[2., 1., -float('inf')], [4., 0., -float('inf')]]),
+               'fuse_weights': torch.tensor([[.4], [.8]])}
+        rows = compare_outputs(on, off, torch.tensor([[.2], [.3]]), torch)
+        self.assertTrue(rows[0]['action_changed'])
+        self.assertFalse(rows[1]['action_changed'])
+        self.assertTrue(rows[1]['saturated_on'])
+        self.assertEqual(rows[0]['max_abs_logit_change'], 1.)
+        self.assertTrue(rows[0]['finite_mask_equal'])
+
     def test_zero_residual_gradient_and_mask(self):
         import torch
         from models.semantic_fusion import SemanticFusionAdapter

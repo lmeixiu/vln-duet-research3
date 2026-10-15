@@ -5,6 +5,7 @@
 在原有 global/local 融合门控中加入子指令注意力残差，复用已有 R2R 微调 checkpoint，冻结主干，仅训练融合门控与新增模块，无需重新预训练。
 
 - **[中文运行说明与实验配置](README-pilot-zh.md)**
+- **[训练后诊断：参数变化、残差与动作对比](DIAGNOSIS.md)**
 - [核心融合模块](map_nav_src/models/semantic_fusion.py)
 - [小规模实验入口](tools/run_semantic_pilot.py)
 - [对照实验脚本](tools/run_r2r_semantic_pilot.sh)
