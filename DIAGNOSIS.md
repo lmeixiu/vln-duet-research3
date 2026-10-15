@@ -1,5 +1,28 @@
 # 诊断语义融合是否影响决策
 
+## 完整导航残差消融（新增）
+
+从仓库根目录执行，保持三个路径环境变量有效：
+
+```bash
+python tools/test_residual_ablation.py
+bash tools/run_residual_ablation.sh
+```
+
+分别启动两个独立进程，加载同一原始 checkpoint 和同一训练后适配器，使用相同验证指令与 seed。ON 保留语义残差，OFF 每次前向都将残差置零，之后各自自主执行完整导航轨迹。两者均不训练，保留同一训练后的原有门控。这里的 OFF 不是之前独立训练的 off 基线。
+
+默认评估 64 条指令。“完整导航”指完整执行各条路线，不表示完整验证集。使用 `VAL_EXAMPLES=300 bash tools/run_residual_ablation.sh` 扩大到 300 条；0 为全部 val_unseen。保留原始 max_action_len 限制。
+
+结果在 `$PILOT_ROOT/residual_ablation_时间戳/`：
+
+- `comparison.json`：两组 SR/SPL/NE 等指标，ON 减 OFF 的差值、帮助/损害的指令数、轨迹变化数。
+- `per_instruction_comparison.json`：按唯一 instr_id 对齐的逐条成功状态、SPL、NE 和轨迹变化。
+- `on/` 和 `off/`：各自指标、轨迹、运行日志与子集清单。
+
+指令只计一次；两组子集不一致时拒绝比较。可能存在同一路径的多条指令，因此不是独立路径层面的统计检验。帮助指 OFF 失败但 ON 成功，损害指相反情况；净帮助数量可能为零但轨迹和 SPL 仍有变化。
+
+本地已通过三个聚合逻辑测试与语法/CLI 检查；完整导航需要在服务器的 MatterSim/GPU 环境执行，尚未在本地验证。不改变原有 checkpoint 或适配器文件。
+
 在现有 DUET 服务器环境使用。不会修改训练后的权重，无需重新训练。
 
 ## 一键诊断

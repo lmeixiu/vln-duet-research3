@@ -60,6 +60,8 @@ def main():
     parser.add_argument('--evaluate', action='store_true', help='Also run GPU/MatterSim evaluation')
     parser.add_argument('--data-root')
     parser.add_argument('--limit-val-examples', type=int, default=64)
+    parser.add_argument('--rollout-residual', choices=['on', 'off'],
+                        help='Independent complete rollout, instead of same-state diagnosis')
     args = parser.parse_args()
     import torch
     from pilot_checkpoint import read_checkpoint
@@ -90,6 +92,17 @@ def main():
     def diagnosed_forward(model, *inputs, **kwargs):
         if model.training:
             raise RuntimeError('Counterfactual diagnosis is evaluation-only')
+        if args.rollout_residual == 'on':
+            with torch.no_grad():
+                return original_forward(model, *inputs, **kwargs)
+        if args.rollout_residual == 'off':
+            hook = model.semantic_fusion_adapter.register_forward_hook(
+                lambda m, x, y: torch.zeros_like(y))
+            try:
+                with torch.no_grad():
+                    return original_forward(model, *inputs, **kwargs)
+            finally:
+                hook.remove()
         captured = []
         adapter = model.semantic_fusion_adapter
         hook = adapter.register_forward_hook(lambda m, x, y: captured.append(y.detach()))
@@ -115,7 +128,14 @@ def main():
 
     def diagnosed_test(agent, *inputs, **kwargs):
         result = original_test(agent, *inputs, **kwargs)
-        (out/'trajectories.json').write_text(json.dumps(agent.get_results(), indent=2), encoding='utf-8')
+        predictions = agent.get_results()
+        (out/'trajectories.json').write_text(json.dumps(predictions, indent=2), encoding='utf-8')
+        averages, per_instruction = agent.env.eval_metrics(predictions)
+        def numeric(value):
+            return value.item() if hasattr(value, 'item') else value
+        (out/'navigation_metrics.json').write_text(json.dumps(
+            {'residual': args.rollout_residual, 'aggregate': averages,
+             'per_instruction': per_instruction}, default=numeric, indent=2), encoding='utf-8')
         return result
 
     config = saved['args']
@@ -140,6 +160,9 @@ def main():
     finally:
         GlocalTextPathNavCMT.forward_navigation_per_step = original_forward
         GMapNavAgent.test = original_test
+    if args.rollout_residual is not None:
+        print('Independent rollout complete: residual=%s; results: %s' % (args.rollout_residual, out))
+        return
     (out/'same_state_steps.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
     n = len(records)
     summary = {'forward_rows': n,
